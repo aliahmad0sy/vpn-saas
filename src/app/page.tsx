@@ -3,35 +3,36 @@ import { MapPin, ShieldCheck, Cpu, Activity } from 'lucide-react';
 import { MarketingNavbar } from '@/components/marketing/navbar';
 import { MarketingFooter } from '@/components/marketing/footer';
 import { Hero } from '@/components/marketing/hero';
-import { PricingGrid, type PricingPlan } from '@/components/marketing/pricing-grid';
+import { PricingCards, type Plan } from '@/components/marketing/pricing-cards';
 import { Button } from '@/components/ui/button';
 import { prisma } from '@/lib/prisma';
+import { auth } from '@/server/auth';
 
 export const revalidate = 60;
 
 const tierOrder = ['FREE', 'BASIC', 'PRO', 'ENTERPRISE'] as const;
 
 export default async function HomePage() {
-  const [plans, servers] = await Promise.all([
+  const [plans, servers, session] = await Promise.all([
     prisma.plan
       .findMany({ where: { active: true } })
-      .catch(() => [])
-      .then((rows) => rows.sort((a, b) => tierOrder.indexOf(a.tier) - tierOrder.indexOf(b.tier))),
+      .then((rows) => rows.sort((a, b) => tierOrder.indexOf(a.tier) - tierOrder.indexOf(b.tier)))
+      .catch(() => [] as Awaited<ReturnType<typeof prisma.plan.findMany>>),
     prisma.server.findMany({ where: { status: 'ONLINE' }, take: 6 }).catch(() => []),
+    auth().catch(() => null),
   ]);
 
-  const pricingPlans: PricingPlan[] = plans.map((p) => ({
+  const cardPlans: Plan[] = plans.map((p) => ({
     id: p.id,
     tier: p.tier,
     name: p.name,
     description: p.description,
     priceMonthly: p.priceMonthly,
+    priceYearly: p.priceYearly,
+    trialDays: p.trialDays,
     features: p.features,
-    highlight: p.tier === 'PRO',
-    cta: {
-      href: p.tier === 'FREE' ? '/register' : '/pricing',
-      label: p.tier === 'FREE' ? 'Start free' : 'Choose plan',
-    },
+    hasMonthlyPrice: !!p.stripePriceId,
+    hasYearlyPrice: !!p.stripePriceIdYearly,
   }));
 
   return (
@@ -106,8 +107,12 @@ export default async function HomePage() {
             </p>
           </div>
           <div className="mt-12">
-            {pricingPlans.length > 0 ? (
-              <PricingGrid plans={pricingPlans} />
+            {cardPlans.length > 0 ? (
+              <PricingCards
+                plans={cardPlans}
+                authed={!!session?.user}
+                hasActiveSubscription={false}
+              />
             ) : (
               <p className="text-center text-sm text-slate-500">
                 Pricing loads after the database is seeded.
