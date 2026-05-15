@@ -1,0 +1,52 @@
+[Unit]
+Description=ShieldVPN Next.js application
+Documentation=https://github.com/aliahmad0sy/vpn-saas
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=shieldvpn
+Group=shieldvpn
+WorkingDirectory=/home/shieldvpn/app
+EnvironmentFile=/home/shieldvpn/app/.env
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=HOSTNAME=127.0.0.1
+ExecStart=/usr/bin/node .next/standalone/server.js
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=20
+
+# Hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/shieldvpn/app /tmp
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+# These limits keep the worker tight; tune for your traffic.
+MemoryMax=1G
+TasksMax=512
+
+# Log to journald with a tag so journalctl -u shieldvpn-app -f is readable.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=shieldvpn-app
+
+[Install]
+WantedBy=multi-user.target
