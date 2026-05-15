@@ -4,15 +4,10 @@ import { prisma } from '@/lib/prisma';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { formatBytes, formatDate } from '@/lib/utils';
+import { serverStatusTone, syncJobStatusTone } from '@/lib/status';
 import { Activity, AlertTriangle, CheckCircle2, Cpu, Server as ServerIcon, Wifi } from 'lucide-react';
 
 export const metadata = { title: 'Monitoring' };
-
-const statusTone: Record<string, 'success' | 'warning' | 'danger' | 'default'> = {
-  ONLINE: 'success',
-  MAINTENANCE: 'warning',
-  OFFLINE: 'danger',
-};
 
 export default async function MonitoringPage() {
   await requireAdmin();
@@ -148,7 +143,7 @@ export default async function MonitoringPage() {
                       </p>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge tone={statusTone[s.status] ?? 'default'}>{s.status.toLowerCase()}</Badge>
+                      <Badge tone={serverStatusTone[s.status]}>{s.status.toLowerCase()}</Badge>
                     </td>
                     <td className="px-4 py-3">
                       {s._count.vpnConfigs} / {s.capacity}{' '}
@@ -222,7 +217,7 @@ export default async function MonitoringPage() {
                     <p className="mt-1 text-xs text-red-600 dark:text-red-400">{c.error.slice(0, 90)}</p>
                   )}
                 </div>
-                <Badge tone={statusTone[c.status] ?? 'default'}>{c.status.toLowerCase()}</Badge>
+                <Badge tone={serverStatusTone[c.status]}>{c.status.toLowerCase()}</Badge>
               </li>
             ))}
           </ul>
@@ -277,14 +272,6 @@ export default async function MonitoringPage() {
   );
 }
 
-function SyncStatusBadge({ status }: { status: string }) {
-  const tone =
-    status === 'SUCCEEDED'
-      ? 'success'
-      : status === 'FAILED'
-        ? 'danger'
-        : status === 'RUNNING'
-          ? 'info'
-          : 'default';
-  return <Badge tone={tone}>{status.toLowerCase()}</Badge>;
+function SyncStatusBadge({ status }: { status: import('@prisma/client').PeerSyncStatus }) {
+  return <Badge tone={syncJobStatusTone[status]}>{status.toLowerCase()}</Badge>;
 }

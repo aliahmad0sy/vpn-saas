@@ -3,6 +3,7 @@ import { requireAdmin } from '@/server/guards';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { serverStatusTone } from '@/lib/status';
 import { setServerStatusAction, upsertServerAction } from '@/server/actions/admin';
 
 export const metadata = { title: 'Servers' };
@@ -113,11 +114,7 @@ export default async function AdminServersPage() {
                 <td className="px-4 py-3 text-slate-500">{s.hostname}</td>
                 <td className="px-4 py-3 text-slate-500">{s.subnetCidr}</td>
                 <td className="px-4 py-3">
-                  <Badge
-                    tone={s.status === 'ONLINE' ? 'success' : s.status === 'MAINTENANCE' ? 'warning' : 'danger'}
-                  >
-                    {s.status.toLowerCase()}
-                  </Badge>
+                  <Badge tone={serverStatusTone[s.status]}>{s.status.toLowerCase()}</Badge>
                 </td>
                 <td className="px-4 py-3">
                   <form action={setServerStatusAction} className="flex items-center gap-2">

@@ -1,34 +1,21 @@
 'use client';
 
-import { useRef, useTransition } from 'react';
+import { useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useToast } from '@/components/ui/toast';
+import { useServerAction } from '@/hooks/use-server-action';
 import { changePasswordAction } from '@/server/actions/settings';
 
 export function PasswordForm() {
-  const [pending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
-  const { toast } = useToast();
-
-  function onSubmit(formData: FormData) {
-    startTransition(async () => {
-      try {
-        await changePasswordAction(formData);
-        toast({ tone: 'success', title: 'Password updated' });
-        formRef.current?.reset();
-      } catch (err) {
-        toast({
-          tone: 'error',
-          title: 'Could not change password',
-          description: err instanceof Error ? err.message : 'Unknown error',
-        });
-      }
-    });
-  }
+  const { run, pending } = useServerAction(changePasswordAction, {
+    success: 'Password updated',
+    errorTitle: 'Could not change password',
+    onSuccess: () => formRef.current?.reset(),
+  });
 
   return (
-    <form ref={formRef} action={onSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <form ref={formRef} action={run} className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       <div>
         <label htmlFor="currentPassword" className="mb-1.5 block text-sm font-medium">
           Current password

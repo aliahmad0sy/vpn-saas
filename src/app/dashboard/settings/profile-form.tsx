@@ -1,32 +1,18 @@
 'use client';
 
-import { useTransition } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useToast } from '@/components/ui/toast';
+import { useServerAction } from '@/hooks/use-server-action';
 import { updateProfileAction } from '@/server/actions/settings';
 
 export function ProfileForm({ initialName, email }: { initialName: string; email: string }) {
-  const [pending, startTransition] = useTransition();
-  const { toast } = useToast();
-
-  function onSubmit(formData: FormData) {
-    startTransition(async () => {
-      try {
-        await updateProfileAction(formData);
-        toast({ tone: 'success', title: 'Profile updated' });
-      } catch (err) {
-        toast({
-          tone: 'error',
-          title: 'Could not update profile',
-          description: err instanceof Error ? err.message : 'Unknown error',
-        });
-      }
-    });
-  }
+  const { run, pending } = useServerAction(updateProfileAction, {
+    success: 'Profile updated',
+    errorTitle: 'Could not update profile',
+  });
 
   return (
-    <form action={onSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <form action={run} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div>
         <label htmlFor="name" className="mb-1.5 block text-sm font-medium">
           Display name

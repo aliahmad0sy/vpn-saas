@@ -3,16 +3,15 @@ import { MarketingFooter } from '@/components/marketing/footer';
 import { PricingCards, type Plan } from '@/components/marketing/pricing-cards';
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/server/auth';
+import { sortByTier } from '@/lib/plans';
 
 export const metadata = { title: 'Pricing' };
-
-const tierOrder = ['FREE', 'BASIC', 'PRO', 'ENTERPRISE'] as const;
 
 export default async function PricingPage() {
   const [plans, session] = await Promise.all([
     prisma.plan
       .findMany({ where: { active: true } })
-      .then((rows) => rows.sort((a, b) => tierOrder.indexOf(a.tier) - tierOrder.indexOf(b.tier)))
+      .then(sortByTier)
       .catch(() => [] as Awaited<ReturnType<typeof prisma.plan.findMany>>),
     auth(),
   ]);

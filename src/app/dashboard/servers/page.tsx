@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { requireUser } from '@/server/guards';
+import { serverStatusTone } from '@/lib/status';
 
 export const metadata = { title: 'Servers' };
 
@@ -19,7 +20,7 @@ export default async function ServersPage() {
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         {servers.map((s) => {
-          const tone = s.status === 'ONLINE' ? 'success' : s.status === 'MAINTENANCE' ? 'warning' : 'danger';
+          const tone = serverStatusTone[s.status];
           const loadPct = Math.min(100, Math.round((s.load / Math.max(1, s.capacity)) * 100));
           return (
             <Card key={s.id}>

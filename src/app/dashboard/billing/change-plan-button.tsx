@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 import { ArrowUpDown, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/components/ui/toast';
+import { useServerAction } from '@/hooks/use-server-action';
 import { changePlanAction } from '@/server/actions/billing';
 import { cn, formatPrice } from '@/lib/utils';
 
@@ -30,27 +30,19 @@ export function ChangePlanButton({
 }) {
   const [open, setOpen] = useState(false);
   const [interval, setInterval] = useState<'MONTH' | 'YEAR'>(currentInterval);
-  const [pending, startTransition] = useTransition();
-  const { toast } = useToast();
+  const { run, pending } = useServerAction(changePlanAction, {
+    success: 'Plan updated',
+    successDescription: 'Proration applied via Stripe.',
+    errorTitle: 'Could not change plan',
+    onSuccess: () => setOpen(false),
+  });
 
   function submit(planId: string) {
     const fd = new FormData();
     fd.set('subscriptionId', subscriptionId);
     fd.set('planId', planId);
     fd.set('interval', interval);
-    startTransition(async () => {
-      try {
-        await changePlanAction(fd);
-        toast({ tone: 'success', title: 'Plan updated', description: 'Proration applied via Stripe.' });
-        setOpen(false);
-      } catch (err) {
-        toast({
-          tone: 'error',
-          title: 'Could not change plan',
-          description: err instanceof Error ? err.message : 'Unknown error',
-        });
-      }
-    });
+    run(fd);
   }
 
   if (!open) {
@@ -114,10 +106,14 @@ export function ChangePlanButton({
                 <div>
                   <p className="font-medium">
                     {p.name}{' '}
-                    <span className="font-normal text-slate-500">— {formatPrice(price)}/{interval === 'YEAR' ? 'yr' : 'mo'}</span>
+                    <span className="font-normal text-slate-500">
+                      — {formatPrice(price)}/{interval === 'YEAR' ? 'yr' : 'mo'}
+                    </span>
                   </p>
                   {isCurrent && (
-                    <p className="text-xs text-emerald-600 dark:text-emerald-400">Your current plan</p>
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                      Your current plan
+                    </p>
                   )}
                 </div>
                 <Button

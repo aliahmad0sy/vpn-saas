@@ -1,35 +1,20 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useToast } from '@/components/ui/toast';
+import { useServerAction } from '@/hooks/use-server-action';
 import { deleteAccountAction } from '@/server/actions/settings';
 
 export function DangerZone() {
   const [confirming, setConfirming] = useState(false);
-  const [pending, startTransition] = useTransition();
-  const { toast } = useToast();
-
-  function onSubmit(formData: FormData) {
-    startTransition(async () => {
-      try {
-        // deleteAccountAction signs out and redirects on success, so this
-        // promise typically rejects with NEXT_REDIRECT — that's expected.
-        await deleteAccountAction(formData);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : '';
-        // Don't surface Next.js redirect throws to the user.
-        if (message.includes('NEXT_REDIRECT')) return;
-        toast({
-          tone: 'error',
-          title: 'Could not delete account',
-          description: message || 'Unknown error',
-        });
-      }
-    });
-  }
+  // The action redirects to '/' on success; useServerAction already
+  // suppresses NEXT_REDIRECT errors, so no extra handling here.
+  const { run, pending } = useServerAction(deleteAccountAction, {
+    success: false,
+    errorTitle: 'Could not delete account',
+  });
 
   if (!confirming) {
     return (
@@ -41,7 +26,7 @@ export function DangerZone() {
 
   return (
     <form
-      action={onSubmit}
+      action={run}
       className="space-y-3 rounded-lg border border-red-200 bg-red-50/60 p-4 dark:border-red-900/60 dark:bg-red-950/30"
     >
       <p className="text-sm text-red-800 dark:text-red-200">

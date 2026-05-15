@@ -5,6 +5,8 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatDate, formatPrice } from '@/lib/utils';
+import { subscriptionStatusTone, invoiceStatusTone } from '@/lib/status';
+import { sortByTier } from '@/lib/plans';
 import {
   createPortalSessionAction,
   reconcileSubscriptionAction,
@@ -14,26 +16,6 @@ import { ChangePlanButton } from './change-plan-button';
 import { CancelResumeControls } from './cancel-resume-controls';
 
 export const metadata = { title: 'Billing' };
-
-const statusTone: Record<string, 'success' | 'warning' | 'danger' | 'default' | 'info'> = {
-  ACTIVE: 'success',
-  TRIALING: 'info',
-  PAST_DUE: 'warning',
-  CANCELED: 'danger',
-  INCOMPLETE: 'warning',
-  INCOMPLETE_EXPIRED: 'danger',
-  UNPAID: 'danger',
-};
-
-const invoiceStatusTone: Record<string, 'success' | 'warning' | 'danger' | 'default' | 'info'> = {
-  PAID: 'success',
-  OPEN: 'info',
-  DRAFT: 'default',
-  UNCOLLECTIBLE: 'danger',
-  VOID: 'default',
-};
-
-const tierOrder = ['FREE', 'BASIC', 'PRO', 'ENTERPRISE'] as const;
 
 export default async function BillingPage() {
   const user = await requireUser();
@@ -55,9 +37,7 @@ export default async function BillingPage() {
       take: 25,
     }),
     prisma.user.findUnique({ where: { id: user.id }, select: { stripeCustomerId: true } }),
-    prisma.plan
-      .findMany({ where: { active: true } })
-      .then((rows) => rows.sort((a, b) => tierOrder.indexOf(a.tier) - tierOrder.indexOf(b.tier))),
+    prisma.plan.findMany({ where: { active: true } }).then(sortByTier),
   ]);
 
   const switchablePlans = plans
@@ -172,7 +152,7 @@ export default async function BillingPage() {
                   <td className="px-4 py-3 font-medium">{s.plan.name}</td>
                   <td className="px-4 py-3 capitalize">{s.interval.toLowerCase()}</td>
                   <td className="px-4 py-3">
-                    <Badge tone={statusTone[s.status] ?? 'default'}>{s.status.toLowerCase()}</Badge>
+                    <Badge tone={subscriptionStatusTone[s.status]}>{s.status.toLowerCase()}</Badge>
                   </td>
                   <td className="px-4 py-3">{formatDate(s.currentPeriodEnd)}</td>
                 </tr>
@@ -212,7 +192,7 @@ export default async function BillingPage() {
                   <td className="px-4 py-3">{formatDate(inv.createdAt)}</td>
                   <td className="px-4 py-3">{formatPrice(inv.amountDue, inv.currency)}</td>
                   <td className="px-4 py-3">
-                    <Badge tone={invoiceStatusTone[inv.status] ?? 'default'}>
+                    <Badge tone={invoiceStatusTone[inv.status]}>
                       {inv.status.toLowerCase()}
                     </Badge>
                   </td>

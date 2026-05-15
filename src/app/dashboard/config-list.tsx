@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 import { Download, QrCode, Trash2, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { useServerAction } from '@/hooks/use-server-action';
 import { revokeVpnConfigAction } from '@/server/actions/vpn';
 import { formatDate } from '@/lib/utils';
 
@@ -22,8 +23,12 @@ export function ConfigList({ configs }: { configs: Item[] }) {
   const [qrFor, setQrFor] = useState<string | null>(null);
   const [qrData, setQrData] = useState<string | null>(null);
   const [loadingQr, setLoadingQr] = useState(false);
-  const [revoking, startRevoke] = useTransition();
   const { toast } = useToast();
+  const { run: revokeAction, pending: revoking } = useServerAction(revokeVpnConfigAction, {
+    success: 'Device revoked',
+    successDescription: 'The tunnel is no longer valid.',
+    errorTitle: 'Could not revoke',
+  });
 
   async function openQr(id: string) {
     setQrFor(id);
@@ -52,18 +57,7 @@ export function ConfigList({ configs }: { configs: Item[] }) {
   function revoke(id: string) {
     const fd = new FormData();
     fd.set('configId', id);
-    startRevoke(async () => {
-      try {
-        await revokeVpnConfigAction(fd);
-        toast({ tone: 'success', title: 'Device revoked', description: 'The tunnel is no longer valid.' });
-      } catch (err) {
-        toast({
-          tone: 'error',
-          title: 'Could not revoke',
-          description: err instanceof Error ? err.message : 'Unknown error',
-        });
-      }
-    });
+    revokeAction(fd);
   }
 
   return (

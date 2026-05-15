@@ -1,11 +1,13 @@
+import type { SubscriptionStatus } from '@prisma/client';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { formatDate, formatPrice } from '@/lib/utils';
+import { subscriptionStatusTone } from '@/lib/status';
 
 type Props = {
   subscription: {
     id: string;
-    status: string;
+    status: SubscriptionStatus;
     interval: 'MONTH' | 'YEAR';
     currentPeriodEnd: string | null;
     trialEnd: string | null;
@@ -21,13 +23,6 @@ type Props = {
   actions: React.ReactNode;
 };
 
-const statusTone: Record<string, 'success' | 'warning' | 'danger' | 'info' | 'default'> = {
-  ACTIVE: 'success',
-  TRIALING: 'info',
-  PAST_DUE: 'warning',
-  UNPAID: 'danger',
-};
-
 export function CurrentPlanCard({ subscription: s, actions }: Props) {
   const isYearly = s.interval === 'YEAR';
   const price = isYearly ? s.plan.priceYearly : s.plan.priceMonthly;
@@ -41,7 +36,7 @@ export function CurrentPlanCard({ subscription: s, actions }: Props) {
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-semibold">{s.plan.name}</h2>
-            <Badge tone={statusTone[s.status] ?? 'default'}>{s.status.toLowerCase()}</Badge>
+            <Badge tone={subscriptionStatusTone[s.status]}>{s.status.toLowerCase()}</Badge>
             {s.cancelAtPeriodEnd && <Badge tone="warning">cancels at period end</Badge>}
           </div>
           <p className="mt-2 text-2xl font-bold">

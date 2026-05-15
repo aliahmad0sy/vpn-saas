@@ -1,33 +1,21 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/components/ui/toast';
+import { useServerAction } from '@/hooks/use-server-action';
 import { createVpnConfigAction } from '@/server/actions/vpn';
 
 type Server = { id: string; name: string; location: string; premiumOnly: boolean };
 
 export function NewDeviceForm({ servers }: { servers: Server[] }) {
   const [open, setOpen] = useState(false);
-  const [pending, startTransition] = useTransition();
-  const { toast } = useToast();
-
-  function onSubmit(formData: FormData) {
-    startTransition(async () => {
-      try {
-        await createVpnConfigAction(formData);
-        toast({ tone: 'success', title: 'Device added', description: 'Your new tunnel is ready.' });
-        setOpen(false);
-      } catch (err) {
-        toast({
-          tone: 'error',
-          title: 'Could not add device',
-          description: err instanceof Error ? err.message : 'Unknown error',
-        });
-      }
-    });
-  }
+  const { run, pending } = useServerAction(createVpnConfigAction, {
+    success: 'Device added',
+    successDescription: 'Your new tunnel is ready.',
+    errorTitle: 'Could not add device',
+    onSuccess: () => setOpen(false),
+  });
 
   if (!open) {
     return (
@@ -39,7 +27,7 @@ export function NewDeviceForm({ servers }: { servers: Server[] }) {
 
   return (
     <form
-      action={onSubmit}
+      action={run}
       className="grid w-full grid-cols-1 gap-3 rounded-lg border border-slate-200 p-4 sm:grid-cols-3 dark:border-slate-800"
     >
       <div>

@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 import { RotateCcw, Ban } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/components/ui/toast';
+import { useServerAction } from '@/hooks/use-server-action';
 import {
   cancelSubscriptionAction,
   resumeSubscriptionAction,
@@ -20,55 +20,38 @@ export function CancelResumeControls({
   periodEnd: string | null;
 }) {
   const [confirming, setConfirming] = useState(false);
-  const [pending, startTransition] = useTransition();
-  const { toast } = useToast();
 
-  function callCancel(immediately: boolean) {
+  const { run: cancel, pending: cancelPending } = useServerAction(cancelSubscriptionAction, {
+    successDescription: (fd) =>
+      fd.get('immediately') === 'on'
+        ? 'Access has been revoked.'
+        : `Access continues until ${periodEnd ? formatDate(periodEnd) : 'the end of the period'}.`,
+    success: 'Cancellation processed',
+    errorTitle: 'Cancellation failed',
+    onSuccess: () => setConfirming(false),
+  });
+
+  const { run: resume, pending: resumePending } = useServerAction(resumeSubscriptionAction, {
+    success: 'Subscription resumed',
+    errorTitle: 'Could not resume',
+  });
+
+  function submitCancel(immediately: boolean) {
     const fd = new FormData();
     fd.set('subscriptionId', subscriptionId);
     if (immediately) fd.set('immediately', 'on');
-    startTransition(async () => {
-      try {
-        await cancelSubscriptionAction(fd);
-        toast({
-          tone: 'success',
-          title: immediately ? 'Subscription canceled' : 'Cancellation scheduled',
-          description: immediately
-            ? 'Access has been revoked.'
-            : `Access continues until ${periodEnd ? formatDate(periodEnd) : 'the end of the period'}.`,
-        });
-        setConfirming(false);
-      } catch (err) {
-        toast({
-          tone: 'error',
-          title: 'Cancellation failed',
-          description: err instanceof Error ? err.message : 'Unknown error',
-        });
-      }
-    });
+    cancel(fd);
   }
-
-  function callResume() {
+  function submitResume() {
     const fd = new FormData();
     fd.set('subscriptionId', subscriptionId);
-    startTransition(async () => {
-      try {
-        await resumeSubscriptionAction(fd);
-        toast({ tone: 'success', title: 'Subscription resumed' });
-      } catch (err) {
-        toast({
-          tone: 'error',
-          title: 'Could not resume',
-          description: err instanceof Error ? err.message : 'Unknown error',
-        });
-      }
-    });
+    resume(fd);
   }
 
   if (cancelAtPeriodEnd) {
     return (
-      <Button variant="outline" type="button" onClick={callResume} disabled={pending}>
-        <RotateCcw className="h-4 w-4" /> {pending ? 'Resuming…' : 'Resume subscription'}
+      <Button variant="outline" type="button" onClick={submitResume} disabled={resumePending}>
+        <RotateCcw className="h-4 w-4" /> {resumePending ? 'Resuming…' : 'Resume subscription'}
       </Button>
     );
   }
@@ -92,8 +75,8 @@ export function CancelResumeControls({
           variant="danger"
           size="sm"
           type="button"
-          disabled={pending}
-          onClick={() => callCancel(true)}
+          disabled={cancelPending}
+          onClick={() => submitCancel(true)}
         >
           End now
         </Button>
@@ -101,8 +84,8 @@ export function CancelResumeControls({
           variant="outline"
           size="sm"
           type="button"
-          disabled={pending}
-          onClick={() => callCancel(false)}
+          disabled={cancelPending}
+          onClick={() => submitCancel(false)}
         >
           At period end
         </Button>

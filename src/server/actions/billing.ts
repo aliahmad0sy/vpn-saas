@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { stripe } from '@/lib/stripe';
 import { prisma } from '@/lib/prisma';
 import { env } from '@/lib/env';
+import { priceIdForInterval } from '@/lib/plans';
 import { requireUser } from '@/server/guards';
 import { audit } from '@/lib/audit';
 import { syncSubscriptionFromStripe, syncInvoiceFromStripe } from '@/server/services/billing';
@@ -34,13 +35,6 @@ async function ensureCustomerId(userId: string): Promise<string> {
   return customer.id;
 }
 
-function priceIdFor(
-  plan: { stripePriceId: string | null; stripePriceIdYearly: string | null },
-  interval: 'MONTH' | 'YEAR',
-): string | null {
-  return interval === 'YEAR' ? plan.stripePriceIdYearly : plan.stripePriceId;
-}
-
 export async function createCheckoutAction(formData: FormData): Promise<void> {
   const user = await requireUser();
   const parsed = checkoutSchema.safeParse({
@@ -52,7 +46,7 @@ export async function createCheckoutAction(formData: FormData): Promise<void> {
   const plan = await prisma.plan.findUnique({ where: { id: parsed.data.planId } });
   if (!plan || !plan.active) throw new Error('Plan unavailable');
 
-  const priceId = priceIdFor(plan, parsed.data.interval);
+  const priceId = priceIdForInterval(plan, parsed.data.interval);
   if (!priceId) throw new Error('This plan is not configured for the selected interval');
 
   // Block duplicate active subscriptions — they should use the change-plan flow instead.
@@ -192,7 +186,7 @@ export async function changePlanAction(formData: FormData): Promise<void> {
   const plan = await prisma.plan.findUnique({ where: { id: parsed.data.planId } });
   if (!plan || !plan.active) throw new Error('Plan unavailable');
 
-  const newPriceId = priceIdFor(plan, parsed.data.interval);
+  const newPriceId = priceIdForInterval(plan, parsed.data.interval);
   if (!newPriceId) throw new Error('This plan is not configured for the selected interval');
 
   // No-op if already on the same price.
