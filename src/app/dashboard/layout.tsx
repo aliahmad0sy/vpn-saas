@@ -3,6 +3,10 @@ import { prisma } from '@/lib/prisma';
 import { Sidebar } from '@/components/app-shell/sidebar';
 import { Topbar } from '@/components/app-shell/topbar';
 
+// Same reasoning as the admin layout: every dashboard page is per-user and
+// must never be statically prerendered.
+export const dynamic = 'force-dynamic';
+
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
   const db = await prisma.user.findUnique({

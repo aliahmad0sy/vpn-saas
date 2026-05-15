@@ -3,6 +3,12 @@ import { prisma } from '@/lib/prisma';
 import { Sidebar } from '@/components/app-shell/sidebar';
 import { Topbar } from '@/components/app-shell/topbar';
 
+// Every admin page reads user-specific state (sessions, audit, server fleet)
+// and must never be served from a static prerender. Force dynamic rendering
+// on the whole admin segment so the build doesn't try to hit the DB during
+// "Collecting page data".
+export const dynamic = 'force-dynamic';
+
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const admin = await requireAdmin();
   const db = await prisma.user.findUnique({
