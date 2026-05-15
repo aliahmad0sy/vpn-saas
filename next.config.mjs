@@ -2,10 +2,13 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Emit a minimal server bundle at .next/standalone for Docker prod images.
+  output: 'standalone',
   // ssh2 ships a native binding (sshcrypto.node) — Next's webpack can't
   // bundle .node files. Mark it external so it's loaded from node_modules
-  // at runtime instead.
-  serverExternalPackages: ['ssh2'],
+  // at runtime instead. Also keep prisma + bcryptjs external for the
+  // standalone build so their native pieces resolve correctly.
+  serverExternalPackages: ['ssh2', '@prisma/client', 'bcryptjs'],
   experimental: {
     serverActions: {
       bodySizeLimit: '2mb',

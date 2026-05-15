@@ -1,0 +1,114 @@
+# Production stack: Postgres + app + nginx (TLS terminator).
+# Use with the .env file at the repo root, or pass env via your secret manager.
+#
+# Bring up:   docker compose -f deploy/docker-compose.prod.yml up -d --build
+# Migrate:    docker compose -f deploy/docker-compose.prod.yml exec app npx prisma migrate deploy
+# Seed once:  docker compose -f deploy/docker-compose.prod.yml exec app npm run db:seed
+# Logs:       docker compose -f deploy/docker-compose.prod.yml logs -f app
+#
+# This compose file expects deploy/nginx/shieldvpn.conf rendered from the
+# template, and Let's Encrypt cert material at /etc/letsencrypt on the host.
+
+name: shieldvpn
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: shieldvpn-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vpn}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-vpn_saas}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vpn} -d ${POSTGRES_DB:-vpn_saas}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Postgres is reachable only on the internal compose network — no host port.
+    networks: [internal]
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: shieldvpn-app:latest
+    container_name: shieldvpn-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vpn}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-vpn_saas}?schema=public
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
+      AUTH_TRUST_HOST: "true"
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+      CRON_SECRET: ${CRON_SECRET:?CRON_SECRET is required}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
+      STRIPE_PRICE_BASIC: ${STRIPE_PRICE_BASIC}
+      STRIPE_PRICE_BASIC_YEARLY: ${STRIPE_PRICE_BASIC_YEARLY}
+      STRIPE_PRICE_PRO: ${STRIPE_PRICE_PRO}
+      STRIPE_PRICE_PRO_YEARLY: ${STRIPE_PRICE_PRO_YEARLY}
+      STRIPE_PRICE_ENTERPRISE: ${STRIPE_PRICE_ENTERPRISE}
+      STRIPE_PRICE_ENTERPRISE_YEARLY: ${STRIPE_PRICE_ENTERPRISE_YEARLY}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    networks: [internal, web]
+    # Only nginx talks to the app — keep the port off the host.
+    expose:
+      - "3000"
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: shieldvpn-nginx
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/shieldvpn.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - certbot_webroot:/var/www/certbot:ro
+      - nginx_logs:/var/log/nginx
+    networks: [web]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # certbot in webroot mode — host runs `certbot renew` via cron and writes
+  # certs into /etc/letsencrypt (mounted ro into nginx). The webroot volume
+  # below holds the ACME http-01 challenge files.
+  certbot_webroot:
+    image: alpine:3.20
+    command: ["sh", "-c", "mkdir -p /var/www/certbot && sleep infinity"]
+    volumes:
+      - certbot_webroot:/var/www/certbot
+    profiles: ["init"]
+
+volumes:
+  postgres_data:
+  certbot_webroot:
+  nginx_logs:
+
+networks:
+  internal:
+    driver: bridge
+  web:
+    driver: bridge
