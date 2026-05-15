@@ -1,74 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { stripe } from '@/lib/stripe';
-import { prisma } from '@/lib/prisma';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { audit } from '@/lib/audit';
-import type { SubscriptionStatus } from '@prisma/client';
+import {
+  markEventProcessed,
+  syncInvoiceFromStripe,
+  syncSubscriptionFromStripe,
+} from '@/server/services/billing';
 
 export const runtime = 'nodejs';
-
-const statusMap: Record<Stripe.Subscription.Status, SubscriptionStatus> = {
-  trialing: 'TRIALING',
-  active: 'ACTIVE',
-  past_due: 'PAST_DUE',
-  canceled: 'CANCELED',
-  incomplete: 'INCOMPLETE',
-  incomplete_expired: 'INCOMPLETE_EXPIRED',
-  unpaid: 'UNPAID',
-  paused: 'CANCELED',
-};
-
-async function upsertSubscription(sub: Stripe.Subscription) {
-  const userId = (sub.metadata?.userId as string | undefined) ?? null;
-  const planId = (sub.metadata?.planId as string | undefined) ?? null;
-
-  let dbUserId = userId;
-  if (!dbUserId && typeof sub.customer === 'string') {
-    const user = await prisma.user.findUnique({ where: { stripeCustomerId: sub.customer } });
-    dbUserId = user?.id ?? null;
-  }
-  if (!dbUserId) {
-    logger.warn({ subscription: sub.id }, 'Stripe subscription event without resolvable user');
-    return;
-  }
-
-  let dbPlanId = planId;
-  if (!dbPlanId) {
-    const priceId = sub.items.data[0]?.price?.id;
-    if (priceId) {
-      const plan = await prisma.plan.findFirst({ where: { stripePriceId: priceId } });
-      dbPlanId = plan?.id ?? null;
-    }
-  }
-  if (!dbPlanId) {
-    logger.warn({ subscription: sub.id }, 'Stripe subscription event without resolvable plan');
-    return;
-  }
-
-  await prisma.subscription.upsert({
-    where: { stripeSubscriptionId: sub.id },
-    update: {
-      status: statusMap[sub.status] ?? 'INCOMPLETE',
-      currentPeriodStart: new Date(sub.current_period_start * 1000),
-      currentPeriodEnd: new Date(sub.current_period_end * 1000),
-      cancelAtPeriodEnd: sub.cancel_at_period_end,
-      canceledAt: sub.canceled_at ? new Date(sub.canceled_at * 1000) : null,
-      planId: dbPlanId,
-    },
-    create: {
-      userId: dbUserId,
-      planId: dbPlanId,
-      stripeSubscriptionId: sub.id,
-      stripeCustomerId: typeof sub.customer === 'string' ? sub.customer : sub.customer.id,
-      status: statusMap[sub.status] ?? 'INCOMPLETE',
-      currentPeriodStart: new Date(sub.current_period_start * 1000),
-      currentPeriodEnd: new Date(sub.current_period_end * 1000),
-      cancelAtPeriodEnd: sub.cancel_at_period_end,
-    },
-  });
-}
 
 export async function POST(req: NextRequest) {
   const signature = req.headers.get('stripe-signature');
@@ -85,29 +27,63 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
   }
 
+  const isNew = await markEventProcessed(event);
+  if (!isNew) {
+    logger.debug({ id: event.id, type: event.type }, 'Stripe event already processed (idempotent)');
+    return NextResponse.json({ received: true, duplicate: true });
+  }
+
   try {
     switch (event.type) {
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted':
-        await upsertSubscription(event.data.object);
+      case 'customer.subscription.trial_will_end':
+        await syncSubscriptionFromStripe(event.data.object);
         break;
+
       case 'checkout.session.completed': {
         const session = event.data.object;
         if (session.subscription && typeof session.subscription === 'string') {
           const full = await stripe.subscriptions.retrieve(session.subscription);
-          await upsertSubscription(full);
+          await syncSubscriptionFromStripe(full);
         }
         break;
       }
+
+      case 'invoice.created':
+      case 'invoice.finalized':
+      case 'invoice.paid':
+      case 'invoice.payment_succeeded':
+      case 'invoice.payment_failed':
+      case 'invoice.voided':
+      case 'invoice.marked_uncollectible':
+        await syncInvoiceFromStripe(event.data.object);
+        if (
+          event.type === 'invoice.payment_failed' ||
+          event.type === 'invoice.paid' ||
+          event.type === 'invoice.payment_succeeded'
+        ) {
+          const invoice = event.data.object;
+          if (invoice.subscription && typeof invoice.subscription === 'string') {
+            const sub = await stripe.subscriptions.retrieve(invoice.subscription);
+            await syncSubscriptionFromStripe(sub);
+          }
+        }
+        break;
+
       default:
         logger.debug({ type: event.type }, 'Unhandled Stripe event');
     }
 
-    await audit({ action: `stripe.${event.type}`, resource: 'stripe_event', resourceId: event.id });
+    await audit({
+      action: `stripe.${event.type}`,
+      resource: 'stripe_event',
+      resourceId: event.id,
+    });
     return NextResponse.json({ received: true });
   } catch (err) {
-    logger.error({ err, event: event.type }, 'Stripe webhook processing error');
+    logger.error({ err, eventType: event.type, eventId: event.id }, 'Stripe webhook handler error');
     return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 });
   }
 }

@@ -17,8 +17,11 @@ const envSchema = z.object({
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().default('pk_test_dummy'),
 
   STRIPE_PRICE_BASIC: z.string().optional(),
+  STRIPE_PRICE_BASIC_YEARLY: z.string().optional(),
   STRIPE_PRICE_PRO: z.string().optional(),
+  STRIPE_PRICE_PRO_YEARLY: z.string().optional(),
   STRIPE_PRICE_ENTERPRISE: z.string().optional(),
+  STRIPE_PRICE_ENTERPRISE_YEARLY: z.string().optional(),
 
   ADMIN_EMAIL: z.string().email().default('admin@example.com'),
   ADMIN_PASSWORD: z.string().min(8).default('ChangeMeNow123!'),
