@@ -1,0 +1,34 @@
+# /etc/cron.d/shieldvpn — managed by deploy/scripts/install.sh
+# Lines below run as user `shieldvpn`. Override CRON_SECRET via /etc/cron.d/shieldvpn-env
+# or by editing this file (NOT recommended — keep it in /home/shieldvpn/app/.env and
+# source it in the helper script).
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+APP_HOST=http://127.0.0.1:3000
+ENV_FILE=/home/shieldvpn/app/.env
+
+# Helper: read CRON_SECRET out of the .env file at run time so it never
+# appears in this crontab.
+# Sample invocation:
+#   . $ENV_FILE && curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" $APP_HOST/api/cron/sync-peers
+
+# Drain the peer-sync queue every minute.
+*  *    * * *   shieldvpn  set -a; . $ENV_FILE; set +a; curl -fsS -m 30 -X POST -H "Authorization: Bearer $CRON_SECRET" $APP_HOST/api/cron/sync-peers >/dev/null
+
+# Probe every server every 2 minutes.
+*/2 *   * * *   shieldvpn  set -a; . $ENV_FILE; set +a; curl -fsS -m 60 -X POST -H "Authorization: Bearer $CRON_SECRET" $APP_HOST/api/cron/health-check >/dev/null
+
+# Pull traffic counters every 5 minutes.
+*/5 *   * * *   shieldvpn  set -a; . $ENV_FILE; set +a; curl -fsS -m 90 -X POST -H "Authorization: Bearer $CRON_SECRET" $APP_HOST/api/cron/collect-traffic >/dev/null
+
+# Revoke expired / orphaned configs hourly.
+17 *    * * *   shieldvpn  set -a; . $ENV_FILE; set +a; curl -fsS -m 60 -X POST -H "Authorization: Bearer $CRON_SECRET" $APP_HOST/api/cron/expire-configs >/dev/null
+
+# Database backup nightly at 02:30.
+30 2    * * *   shieldvpn  /home/shieldvpn/app/deploy/scripts/backup.sh >/var/log/shieldvpn/backup.log 2>&1
+
+# External healthcheck every 5 minutes (alerts on stderr → journal).
+*/5 *   * * *   shieldvpn  /home/shieldvpn/app/deploy/scripts/healthcheck.sh >/dev/null
+
+# (Required trailing newline — cron rejects files without one.)

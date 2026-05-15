@@ -1,0 +1,7 @@
+node_modules
+.next
+dist
+build
+prisma/migrations
+*.lock
+package-lock.json
