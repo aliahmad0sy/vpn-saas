@@ -2,6 +2,10 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // ssh2 ships a native binding (sshcrypto.node) — Next's webpack can't
+  // bundle .node files. Mark it external so it's loaded from node_modules
+  // at runtime instead.
+  serverExternalPackages: ['ssh2'],
   experimental: {
     serverActions: {
       bodySizeLimit: '2mb',
