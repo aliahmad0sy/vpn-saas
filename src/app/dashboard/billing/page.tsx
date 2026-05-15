@@ -19,9 +19,8 @@ const statusTone: Record<string, 'success' | 'warning' | 'danger' | 'default' | 
   UNPAID: 'danger',
 };
 
-export default async function BillingPage({ searchParams }: { searchParams: Promise<{ success?: string }> }) {
+export default async function BillingPage() {
   const user = await requireUser();
-  const { success } = await searchParams;
 
   const [subscriptions, dbUser] = await Promise.all([
     prisma.subscription.findMany({
@@ -38,12 +37,6 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         <h1 className="text-2xl font-bold tracking-tight">Billing</h1>
         <p className="text-sm text-slate-500">Manage your subscription and payment method.</p>
       </div>
-
-      {success && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-200">
-          Thanks — your subscription is being activated. You may need to refresh in a moment.
-        </div>
-      )}
 
       <Card>
         <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">

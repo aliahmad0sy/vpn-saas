@@ -37,8 +37,10 @@ export async function createCheckoutAction(formData: FormData) {
     mode: 'subscription',
     customer: customerId,
     line_items: [{ price: plan.stripePriceId, quantity: 1 }],
-    success_url: `${env.NEXT_PUBLIC_APP_URL}/dashboard/billing?success=1`,
-    cancel_url: `${env.NEXT_PUBLIC_APP_URL}/pricing?canceled=1`,
+    success_url: `${env.NEXT_PUBLIC_APP_URL}/dashboard/billing?toast=success&message=${encodeURIComponent(
+      'Subscription activated. It may take a moment to appear.',
+    )}`,
+    cancel_url: `${env.NEXT_PUBLIC_APP_URL}/pricing?toast=info&message=${encodeURIComponent('Checkout canceled.')}`,
     subscription_data: { metadata: { userId: dbUser.id, planId: plan.id } },
     allow_promotion_codes: true,
   });

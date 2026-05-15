@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { Download, QrCode, Trash2, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/toast';
 import { revokeVpnConfigAction } from '@/server/actions/vpn';
 import { formatDate } from '@/lib/utils';
 
@@ -21,6 +22,8 @@ export function ConfigList({ configs }: { configs: Item[] }) {
   const [qrFor, setQrFor] = useState<string | null>(null);
   const [qrData, setQrData] = useState<string | null>(null);
   const [loadingQr, setLoadingQr] = useState(false);
+  const [revoking, startRevoke] = useTransition();
+  const { toast } = useToast();
 
   async function openQr(id: string) {
     setQrFor(id);
@@ -28,13 +31,39 @@ export function ConfigList({ configs }: { configs: Item[] }) {
     setLoadingQr(true);
     try {
       const res = await fetch(`/api/v1/configs/${id}?format=qr`);
-      if (res.ok) {
-        const data = (await res.json()) as { qr: string };
-        setQrData(data.qr);
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+        throw new Error(body.error?.message ?? `Request failed (${res.status})`);
       }
+      const data = (await res.json()) as { qr: string };
+      setQrData(data.qr);
+    } catch (err) {
+      toast({
+        tone: 'error',
+        title: 'Could not load QR',
+        description: err instanceof Error ? err.message : 'Unknown error',
+      });
+      setQrFor(null);
     } finally {
       setLoadingQr(false);
     }
+  }
+
+  function revoke(id: string) {
+    const fd = new FormData();
+    fd.set('configId', id);
+    startRevoke(async () => {
+      try {
+        await revokeVpnConfigAction(fd);
+        toast({ tone: 'success', title: 'Device revoked', description: 'The tunnel is no longer valid.' });
+      } catch (err) {
+        toast({
+          tone: 'error',
+          title: 'Could not revoke',
+          description: err instanceof Error ? err.message : 'Unknown error',
+        });
+      }
+    });
   }
 
   return (
@@ -62,12 +91,15 @@ export function ConfigList({ configs }: { configs: Item[] }) {
                 <Button variant="outline" size="sm" onClick={() => openQr(c.id)} type="button">
                   <QrCode className="h-4 w-4" /> QR
                 </Button>
-                <form action={revokeVpnConfigAction}>
-                  <input type="hidden" name="configId" value={c.id} />
-                  <Button variant="danger" size="sm" type="submit">
-                    <Trash2 className="h-4 w-4" /> Revoke
-                  </Button>
-                </form>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  type="button"
+                  disabled={revoking}
+                  onClick={() => revoke(c.id)}
+                >
+                  <Trash2 className="h-4 w-4" /> {revoking ? 'Revoking…' : 'Revoke'}
+                </Button>
               </>
             )}
           </div>
