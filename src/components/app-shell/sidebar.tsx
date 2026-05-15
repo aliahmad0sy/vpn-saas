@@ -17,6 +17,7 @@ const userItems: Item[] = [
 
 const adminItems: Item[] = [
   { href: '/admin', label: 'Admin overview', icon: ShieldCheck },
+  { href: '/admin/monitoring', label: 'Monitoring', icon: Activity },
   { href: '/admin/users', label: 'Users', icon: Users },
   { href: '/admin/servers', label: 'Servers', icon: Server },
   { href: '/admin/audit', label: 'Audit log', icon: Activity },

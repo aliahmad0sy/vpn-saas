@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/server/guards';
 import { audit } from '@/lib/audit';
+import { encrypt } from '@/lib/crypto';
 
 const upsertServerSchema = z.object({
   id: z.string().optional(),
@@ -15,7 +16,13 @@ const upsertServerSchema = z.object({
   endpoint: z.string().min(1),
   publicKey: z.string().min(1),
   subnetCidr: z.string().min(1),
+  wgInterface: z.string().min(1).max(15).default('wg0'),
   premiumOnly: z.union([z.literal('on'), z.string().optional()]),
+  sshHost: z.string().optional(),
+  sshPort: z.coerce.number().int().positive().max(65535).default(22),
+  sshUser: z.string().optional(),
+  sshPrivateKey: z.string().optional(),
+  sshHostFingerprint: z.string().optional(),
 });
 
 export async function upsertServerAction(formData: FormData): Promise<void> {
@@ -23,6 +30,7 @@ export async function upsertServerAction(formData: FormData): Promise<void> {
   const parsed = upsertServerSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) throw new Error(parsed.error.errors[0]?.message ?? 'Invalid input');
 
+  const sshPrivateKeyRaw = parsed.data.sshPrivateKey?.trim();
   const data = {
     name: parsed.data.name,
     location: parsed.data.location,
@@ -31,7 +39,19 @@ export async function upsertServerAction(formData: FormData): Promise<void> {
     endpoint: parsed.data.endpoint,
     publicKey: parsed.data.publicKey,
     subnetCidr: parsed.data.subnetCidr,
+    wgInterface: parsed.data.wgInterface,
     premiumOnly: parsed.data.premiumOnly === 'on',
+    sshHost: parsed.data.sshHost?.trim() || null,
+    sshPort: parsed.data.sshPort,
+    sshUser: parsed.data.sshUser?.trim() || null,
+    sshHostFingerprint: parsed.data.sshHostFingerprint?.trim() || null,
+    // Only overwrite the stored SSH key when the operator pasted a new one.
+    // Empty string => leave existing intact; "-" => clear it.
+    ...(sshPrivateKeyRaw && sshPrivateKeyRaw !== '-'
+      ? { sshPrivateKey: encrypt(sshPrivateKeyRaw) }
+      : sshPrivateKeyRaw === '-'
+        ? { sshPrivateKey: null }
+        : {}),
   };
 
   const server = parsed.data.id
@@ -46,6 +66,30 @@ export async function upsertServerAction(formData: FormData): Promise<void> {
   });
 
   revalidatePath('/admin/servers');
+}
+
+const retrySchema = z.object({ jobId: z.string().min(1) });
+
+export async function retrySyncJobAction(formData: FormData): Promise<void> {
+  const admin = await requireAdmin();
+  const parsed = retrySchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) throw new Error('Invalid input');
+
+  const job = await prisma.peerSyncJob.findUnique({ where: { id: parsed.data.jobId } });
+  if (!job) throw new Error('Job not found');
+  if (job.status !== 'FAILED') throw new Error('Only failed jobs can be retried');
+
+  await prisma.peerSyncJob.update({
+    where: { id: job.id },
+    data: { status: 'PENDING', attempts: 0, error: null, startedAt: null, finishedAt: null },
+  });
+  await audit({
+    userId: admin.id,
+    action: 'admin.sync_job.retry',
+    resource: 'peer_sync_job',
+    resourceId: job.id,
+  });
+  revalidatePath('/admin/monitoring');
 }
 
 const setStatusSchema = z.object({
