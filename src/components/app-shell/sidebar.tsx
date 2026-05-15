@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Shield, LayoutDashboard, Server, CreditCard, Users, Activity, ShieldCheck, LogOut } from 'lucide-react';
+import { Shield, LayoutDashboard, Server, CreditCard, Users, Activity, ShieldCheck, LogOut, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { logoutAction } from '@/server/actions/auth';
 
@@ -12,6 +12,7 @@ const userItems: Item[] = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
   { href: '/dashboard/servers', label: 'Servers', icon: Server },
   { href: '/dashboard/billing', label: 'Billing', icon: CreditCard },
+  { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ];
 
 const adminItems: Item[] = [
