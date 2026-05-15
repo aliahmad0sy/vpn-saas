@@ -42,6 +42,18 @@ enum InvoiceStatus {
   VOID
 }
 
+enum PeerSyncAction {
+  ADD
+  REMOVE
+}
+
+enum PeerSyncStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
 enum ServerStatus {
   ONLINE
   OFFLINE
@@ -196,49 +208,120 @@ model ProcessedStripeEvent {
 }
 
 model Server {
-  id            String       @id @default(cuid())
-  name          String
-  location      String
-  country       String
-  hostname      String       @unique
-  endpoint      String
-  publicKey     String
-  listenPort    Int          @default(51820)
-  dns           String       @default("1.1.1.1, 1.0.0.1")
-  allowedIps    String       @default("0.0.0.0/0, ::/0")
-  subnetCidr    String       @default("10.10.0.0/24")
-  status        ServerStatus @default(ONLINE)
-  load          Int          @default(0)
-  capacity      Int          @default(500)
-  premiumOnly   Boolean      @default(false)
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id                 String       @id @default(cuid())
+  name               String
+  location           String
+  country            String
+  hostname           String       @unique
+  endpoint           String
+  publicKey          String
+  listenPort         Int          @default(51820)
+  dns                String       @default("1.1.1.1, 1.0.0.1")
+  allowedIps         String       @default("0.0.0.0/0, ::/0")
+  subnetCidr         String       @default("10.10.0.0/24")
+  wgInterface        String       @default("wg0")
+  status             ServerStatus @default(ONLINE)
+  load               Int          @default(0)
+  capacity           Int          @default(500)
+  premiumOnly        Boolean      @default(false)
+  // Remote management: encrypted SSH credentials. Null = unmanaged
+  // (configs are still served to users but no remote sync is attempted).
+  sshHost            String?
+  sshPort            Int          @default(22)
+  sshUser            String?
+  sshPrivateKey      String?      @db.Text
+  sshHostFingerprint String?
+  serverPrivateKey   String?      @db.Text
+  lastSyncedAt       DateTime?
+  lastSyncError      String?      @db.Text
+  lastHealthyAt      DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
-  vpnConfigs VpnConfig[]
+  vpnConfigs   VpnConfig[]
+  healthChecks ServerHealthCheck[]
+  syncJobs     PeerSyncJob[]
 
   @@index([status])
 }
 
 model VpnConfig {
-  id          String          @id @default(cuid())
-  userId      String
-  serverId    String
-  name        String
-  publicKey   String
-  privateKey  String          @db.Text
-  presharedKey String?        @db.Text
-  address     String
-  status      VpnConfigStatus @default(ACTIVE)
-  lastUsedAt  DateTime?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id            String          @id @default(cuid())
+  userId        String
+  serverId      String
+  name          String
+  publicKey     String
+  privateKey    String          @db.Text  // AES-256-GCM encrypted
+  presharedKey  String?         @db.Text  // AES-256-GCM encrypted
+  address       String
+  status        VpnConfigStatus @default(ACTIVE)
+  expiresAt     DateTime?
+  lastUsedAt    DateTime?
+  lastSyncedAt  DateTime?
+  bytesRxTotal  BigInt          @default(0)
+  bytesTxTotal  BigInt          @default(0)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  server         Server           @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  trafficRecords TrafficRecord[]
+  syncJobs       PeerSyncJob[]
 
   @@unique([serverId, address])
   @@index([userId])
   @@index([serverId])
+  @@index([status, expiresAt])
+}
+
+model TrafficRecord {
+  id              String   @id @default(cuid())
+  vpnConfigId     String
+  bytesRx         BigInt   @default(0)
+  bytesTx         BigInt   @default(0)
+  latestHandshake DateTime?
+  recordedAt      DateTime @default(now())
+
+  vpnConfig VpnConfig @relation(fields: [vpnConfigId], references: [id], onDelete: Cascade)
+
+  @@index([vpnConfigId, recordedAt])
+  @@index([recordedAt])
+}
+
+model ServerHealthCheck {
+  id        String       @id @default(cuid())
+  serverId  String
+  status    ServerStatus
+  latencyMs Int?
+  peerCount Int?
+  error     String?      @db.Text
+  checkedAt DateTime     @default(now())
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId, checkedAt])
+  @@index([checkedAt])
+}
+
+model PeerSyncJob {
+  id          String         @id @default(cuid())
+  serverId    String
+  vpnConfigId String?
+  publicKey   String
+  action      PeerSyncAction
+  status      PeerSyncStatus @default(PENDING)
+  error       String?        @db.Text
+  attempts    Int            @default(0)
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  server    Server     @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  vpnConfig VpnConfig? @relation(fields: [vpnConfigId], references: [id], onDelete: SetNull)
+
+  @@index([serverId, status])
+  @@index([status, createdAt])
 }
 
 model AuditLog {

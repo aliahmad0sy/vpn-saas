@@ -5,7 +5,9 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { requireUser } from '@/server/guards';
 import { generateKeypair, generatePresharedKey, nextClientAddress } from '@/lib/wireguard';
+import { encrypt } from '@/lib/crypto';
 import { audit } from '@/lib/audit';
+import { enqueuePeerAdd, enqueuePeerRemove } from '@/server/services/vpn-manager';
 
 const createSchema = z.object({
   serverId: z.string().min(1),
@@ -59,17 +61,24 @@ export async function createVpnConfigAction(formData: FormData): Promise<void> {
   const keys = generateKeypair();
   const psk = generatePresharedKey();
 
+  // Honor the active subscription's period end as the default config expiry
+  // so cancelled/expired subs auto-disable. Trial users get trial_end.
+  const expiresAt = subscription.trialEnd ?? subscription.currentPeriodEnd ?? null;
+
   const config = await prisma.vpnConfig.create({
     data: {
       userId: user.id,
       serverId: server.id,
       name: parsed.data.name,
       publicKey: keys.publicKey,
-      privateKey: keys.privateKey,
-      presharedKey: psk,
+      privateKey: encrypt(keys.privateKey),
+      presharedKey: encrypt(psk),
       address,
+      expiresAt,
     },
   });
+
+  await enqueuePeerAdd(config.id);
 
   await audit({
     userId: user.id,
@@ -96,6 +105,7 @@ export async function revokeVpnConfigAction(formData: FormData): Promise<void> {
     where: { id: config.id },
     data: { status: 'REVOKED' },
   });
+  await enqueuePeerRemove(config.id);
 
   await audit({
     userId: user.id,

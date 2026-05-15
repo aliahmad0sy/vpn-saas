@@ -30,6 +30,16 @@ const envSchema = z.object({
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
 
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+
+  // 32 random bytes, base64-encoded — generate with `openssl rand -base64 32`.
+  // If it's not 32 bytes b64, it'll be passed through scrypt to derive the key.
+  ENCRYPTION_KEY: z.string().min(16, 'ENCRYPTION_KEY must be set'),
+
+  // Shared secret for /api/cron/* routes; required to trigger background sweeps.
+  CRON_SECRET: z.string().min(16, 'CRON_SECRET must be set'),
+
+  // SSH connection timeout, per-server, for remote ops.
+  SSH_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/server/auth';
 import { prisma } from '@/lib/prisma';
 import { buildWireGuardConfig, configToQrDataUrl } from '@/lib/wireguard';
+import { decrypt } from '@/lib/crypto';
 import { rateLimit, clientKeyFromRequest } from '@/lib/rate-limit';
 import { ApiError, handleApiError, jsonError } from '@/lib/api-error';
 
@@ -28,13 +29,13 @@ export async function GET(req: NextRequest, { params }: Params) {
     }
 
     const text = buildWireGuardConfig({
-      clientPrivateKey: config.privateKey,
+      clientPrivateKey: decrypt(config.privateKey),
       clientAddress: config.address,
       dns: config.server.dns,
       serverPublicKey: config.server.publicKey,
       serverEndpoint: config.server.endpoint,
       allowedIps: config.server.allowedIps,
-      presharedKey: config.presharedKey,
+      presharedKey: config.presharedKey ? decrypt(config.presharedKey) : null,
     });
 
     const format = new URL(req.url).searchParams.get('format');
