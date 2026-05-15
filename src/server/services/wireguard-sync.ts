@@ -10,6 +10,13 @@ const WG_KEY_RE = /^[A-Za-z0-9+/]{42,44}=*$/;
 const ADDRESS_RE = /^\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?$/;
 const IFACE_RE = /^[A-Za-z0-9_-]{1,15}$/;
 
+// All `wg` invocations are wrapped in `sudo -n` so we can SSH in as a
+// dedicated unprivileged user (e.g. `wg-admin`) that has NOPASSWD sudo
+// granted for `/usr/bin/wg` only. -n makes sudo fail fast (no TTY prompt)
+// if the operator's sudoers entry is wrong, instead of hanging the SSH
+// session. If the SSH user is already root, sudo is a no-op.
+const WG = 'sudo -n wg';
+
 function assertWgKey(value: string, field: string) {
   if (!WG_KEY_RE.test(value)) throw new Error(`Invalid ${field}: ${value}`);
 }
@@ -62,14 +69,14 @@ export async function addPeer(input: PeerAddInput): Promise<void> {
       `PSK_FILE=$(mktemp -p /dev/shm 2>/dev/null || mktemp)`,
       `chmod 600 "$PSK_FILE"`,
       `printf '%s' ${shellSingleQuote(pskB64)} | base64 -d > "$PSK_FILE"`,
-      `wg set ${iface} peer ${cleanPubkey} preshared-key "$PSK_FILE" allowed-ips ${cleanAddr}`,
+      `${WG} set ${iface} peer ${cleanPubkey} preshared-key "$PSK_FILE" allowed-ips ${cleanAddr}`,
       `shred -u "$PSK_FILE" 2>/dev/null || rm -f "$PSK_FILE"`,
     ].join(' && ');
     await execRemoteStrict(server, cmd);
   } else {
     await execRemoteStrict(
       server,
-      `wg set ${iface} peer ${cleanPubkey} allowed-ips ${cleanAddr}`,
+      `${WG} set ${iface} peer ${cleanPubkey} allowed-ips ${cleanAddr}`,
     );
   }
 }
@@ -85,7 +92,7 @@ export async function removePeer(
   // peer is a no-op rather than an error.
   await execRemoteStrict(
     server,
-    `wg set ${shellSingleQuote(server.wgInterface)} peer ${shellSingleQuote(peerPublicKey)} remove`,
+    `${WG} set ${shellSingleQuote(server.wgInterface)} peer ${shellSingleQuote(peerPublicKey)} remove`,
   );
 }
 
@@ -130,7 +137,7 @@ export async function fetchPeerStats(
   assertInterface(server.wgInterface);
   const dump = await execRemoteStrict(
     server,
-    `wg show ${shellSingleQuote(server.wgInterface)} dump`,
+    `${WG} show ${shellSingleQuote(server.wgInterface)} dump`,
   );
   return parseWgDump(dump);
 }
@@ -150,7 +157,7 @@ export async function probeServer(
 ): Promise<ServerHealth> {
   assertInterface(server.wgInterface);
   const started = Date.now();
-  const result = await execRemote(server, `wg show ${shellSingleQuote(server.wgInterface)} dump`);
+  const result = await execRemote(server, `${WG} show ${shellSingleQuote(server.wgInterface)} dump`);
   const latencyMs = Date.now() - started;
   if (result.code !== 0) {
     throw new Error(
