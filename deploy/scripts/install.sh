@@ -123,25 +123,45 @@ log "Rendering nginx vhost for ${DOMAIN}…"
 NGINX_TEMPLATE="${APP_DIR}/deploy/nginx/shieldvpn.conf.template"
 NGINX_PROXY="${APP_DIR}/deploy/nginx/_proxy_params.conf"
 NGINX_TARGET="/etc/nginx/conf.d/shieldvpn.conf"
+CERT_FILE="/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
 
 if [[ ! -f "$NGINX_TEMPLATE" ]]; then
   warn "Template not found at $NGINX_TEMPLATE — skipping nginx step."
 else
   install -m 0644 "$NGINX_PROXY" /etc/nginx/conf.d/_proxy_params.conf
-  # For bare-metal, swap the upstream so nginx points at localhost.
+
+  # Render the vhost. It refers to /etc/letsencrypt/live/${DOMAIN}/, so we
+  # must have a cert in place before nginx -t will pass.
+  rm -f /etc/nginx/sites-enabled/default
   sed "s/server app:3000;.*$/server 127.0.0.1:3000;/" "$NGINX_TEMPLATE" \
     | DOMAIN="$DOMAIN" envsubst '${DOMAIN}' >"$NGINX_TARGET"
-  rm -f /etc/nginx/sites-enabled/default
-  nginx -t
-  systemctl reload nginx
-fi
 
-# ---- 7b. Initial cert -------------------------------------------------------
-if [[ "$SKIP_CERT" != "1" ]]; then
-  log "Requesting initial Let's Encrypt cert for ${DOMAIN}…"
-  certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --email "$LETSENCRYPT_EMAIL" --redirect || \
-    warn "certbot failed — point DNS at this VPS, then rerun: certbot --nginx -d $DOMAIN"
-  systemctl enable --now certbot.timer
+  if [[ "$SKIP_CERT" != "1" && ! -f "$CERT_FILE" ]]; then
+    # Bootstrap the cert via certbot standalone before nginx loads the new
+    # vhost. We temporarily pull the vhost out, stop nginx so :80 is free,
+    # request the cert, then restore the vhost. Safe to rerun — once the
+    # cert exists, this whole block is skipped.
+    log "Bootstrapping initial Let's Encrypt cert for ${DOMAIN} (standalone)…"
+    mv "$NGINX_TARGET" "${NGINX_TARGET}.pending"
+    systemctl stop nginx 2>/dev/null || true
+    if certbot certonly --standalone --non-interactive --agree-tos \
+        --email "$LETSENCRYPT_EMAIL" -d "$DOMAIN"; then
+      log "Cert obtained."
+    else
+      warn "certbot failed — point DNS at this VPS, then rerun: certbot certonly --standalone -d $DOMAIN"
+    fi
+    mv "${NGINX_TARGET}.pending" "$NGINX_TARGET"
+    systemctl start nginx 2>/dev/null || true
+  fi
+
+  if [[ -f "$CERT_FILE" ]]; then
+    nginx -t
+    systemctl reload nginx
+    systemctl enable --now certbot.timer 2>/dev/null || true
+  else
+    warn "TLS cert missing; nginx vhost left in place but not reloaded."
+    warn "After fixing DNS, run: certbot certonly --standalone -d $DOMAIN && systemctl reload nginx"
+  fi
 fi
 
 # ---- 8. systemd + cron ------------------------------------------------------
