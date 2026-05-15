@@ -122,3 +122,25 @@ npm run db:migrate  # create migration
 npm run db:seed     # seed admin + plans + servers
 npm run db:studio   # open Prisma Studio
 ```
+
+## Production deployment
+
+Full walkthrough in **[deploy/README.md](./deploy/README.md)** — two paths
+(Docker Compose or bare-metal Ubuntu VPS), shared nginx config, systemd
+unit, PM2 alternative, cron schedule for the four `/api/cron/*` sweeps,
+backup/restore/rollback/healthcheck/doctor scripts, GitHub Actions CI.
+
+```bash
+# Bare-metal: one command bootstraps a fresh Ubuntu VPS
+DOMAIN=vpn.example.com LETSENCRYPT_EMAIL=ops@example.com \
+  bash deploy/scripts/install.sh
+
+# Docker: everything as containers
+docker compose -f deploy/docker-compose.prod.yml up -d --build
+
+# Deploy a new commit (auto-rolls-back if healthz doesn't go green)
+bash deploy/scripts/deploy.sh
+
+# Diagnose before/after
+bash deploy/scripts/doctor.sh
+```
