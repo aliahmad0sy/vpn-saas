@@ -4,7 +4,11 @@ export function MarketingFooter() {
   return (
     <footer className="border-t border-slate-200 dark:border-slate-800">
       <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-4 px-4 py-8 text-sm text-slate-500 sm:flex-row sm:px-6 lg:px-8 dark:text-slate-400">
-        <p>© {new Date().getFullYear()} ShieldVPN. All rights reserved.</p>
+        {/* getFullYear() is computed on the server and may differ from the
+            client by 1 millisecond around midnight UTC on Dec 31 — silence
+            React's hydration warning rather than ship a client component
+            just to render four characters. */}
+        <p suppressHydrationWarning>© {new Date().getFullYear()} ShieldVPN. All rights reserved.</p>
         <div className="flex items-center gap-5">
           <Link href="/pricing" className="hover:text-slate-900 dark:hover:text-white">
             Pricing

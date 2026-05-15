@@ -20,7 +20,9 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             actually works.
           </p>
         </div>
-        <p className="text-sm text-brand-200">© {new Date().getFullYear()} ShieldVPN</p>
+        <p suppressHydrationWarning className="text-sm text-brand-200">
+          © {new Date().getFullYear()} ShieldVPN
+        </p>
       </div>
       <div className="flex flex-col">
         <header className="flex items-center justify-end p-6">

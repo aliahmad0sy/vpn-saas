@@ -1,4 +1,5 @@
 import { randomBytes, createCipheriv, createDecipheriv, scryptSync, timingSafeEqual } from 'crypto';
+import { env } from './env';
 
 const ALG = 'aes-256-gcm';
 const IV_LEN = 12;
@@ -10,10 +11,7 @@ let cachedKey: Buffer | null = null;
 
 function getKey(): Buffer {
   if (cachedKey) return cachedKey;
-  const raw = process.env.ENCRYPTION_KEY;
-  if (!raw) {
-    throw new Error('ENCRYPTION_KEY is not configured');
-  }
+  const raw = env.ENCRYPTION_KEY;
   // Accept base64-encoded 32-byte keys directly; otherwise derive with scrypt.
   if (/^[A-Za-z0-9+/=]+$/.test(raw)) {
     const decoded = Buffer.from(raw, 'base64');

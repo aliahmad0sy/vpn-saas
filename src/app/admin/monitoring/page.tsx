@@ -17,7 +17,7 @@ const statusTone: Record<string, 'success' | 'warning' | 'danger' | 'default'> =
 export default async function MonitoringPage() {
   await requireAdmin();
 
-  const [servers, peerCount, activeConfigs, expiringSoon, recentJobs, failedJobs, recentChecks, topConfigs] =
+  const [servers, activeConfigs, expiringSoon, recentJobs, failedJobs, recentChecks, topConfigs] =
     await Promise.all([
       prisma.server.findMany({
         orderBy: [{ status: 'asc' }, { name: 'asc' }],
@@ -29,7 +29,6 @@ export default async function MonitoringPage() {
           _count: { select: { vpnConfigs: { where: { status: 'ACTIVE' } } } },
         },
       }),
-      prisma.vpnConfig.count({ where: { status: 'ACTIVE' } }),
       prisma.vpnConfig.count({ where: { status: 'ACTIVE' } }),
       prisma.vpnConfig.count({
         where: {

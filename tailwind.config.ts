@@ -2,7 +2,10 @@ import type { Config } from 'tailwindcss';
 
 const config: Config = {
   content: ['./src/**/*.{ts,tsx,mdx}'],
-  darkMode: 'class',
+  // Use `media` so the existing `dark:` variants apply automatically based on
+  // the user's OS preference. Switching to `class` would require a theme
+  // toggle and adding `dark` to <html> on hydration; we don't ship one yet.
+  darkMode: 'media',
   theme: {
     extend: {
       colors: {
