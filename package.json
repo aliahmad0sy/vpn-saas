@@ -33,6 +33,7 @@
     "qrcode": "^1.5.4",
     "react": "19.0.0",
     "react-dom": "19.0.0",
+    "resend": "^6.12.3",
     "ssh2": "^1.17.0",
     "stripe": "^17.5.0",
     "tailwind-merge": "^2.6.0",

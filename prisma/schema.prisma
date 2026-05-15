@@ -78,12 +78,13 @@ model User {
 
   stripeCustomerId String? @unique
 
-  accounts      Account[]
-  sessions      Session[]
-  subscriptions Subscription[]
-  vpnConfigs    VpnConfig[]
-  auditLogs     AuditLog[]
-  invoices      Invoice[]
+  accounts            Account[]
+  sessions            Session[]
+  subscriptions       Subscription[]
+  vpnConfigs          VpnConfig[]
+  auditLogs           AuditLog[]
+  invoices            Invoice[]
+  passwordResetTokens PasswordResetToken[]
 
   @@index([email])
 }
@@ -124,6 +125,20 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model PasswordResetToken {
+  id         String    @id @default(cuid())
+  tokenHash  String    @unique
+  userId     String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Plan {

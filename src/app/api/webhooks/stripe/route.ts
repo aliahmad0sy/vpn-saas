@@ -4,11 +4,37 @@ import { stripe } from '@/lib/stripe';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
 import { audit } from '@/lib/audit';
+import { prisma } from '@/lib/prisma';
+import { sendEmail } from '@/lib/mail';
+import { paymentFailedEmail } from '@/lib/emails/payment-failed';
 import {
   markEventProcessed,
   syncInvoiceFromStripe,
   syncSubscriptionFromStripe,
 } from '@/server/services/billing';
+
+async function notifyPaymentFailed(invoice: Stripe.Invoice): Promise<void> {
+  const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
+  if (!customerId) return;
+
+  const user = await prisma.user.findUnique({
+    where: { stripeCustomerId: customerId },
+    select: { email: true, name: true },
+  });
+  if (!user) {
+    logger.warn({ invoiceId: invoice.id }, 'Payment failed for customer with no matching user');
+    return;
+  }
+
+  const message = paymentFailedEmail({
+    name: user.name,
+    amountDue: invoice.amount_due ?? 0,
+    currency: invoice.currency ?? 'usd',
+    billingUrl: `${env.NEXT_PUBLIC_APP_URL}/dashboard/billing`,
+    hostedInvoiceUrl: invoice.hosted_invoice_url ?? null,
+  });
+  await sendEmail({ to: user.email, ...message });
+}
 
 export const runtime = 'nodejs';
 
@@ -69,6 +95,12 @@ export async function POST(req: NextRequest) {
             const sub = await stripe.subscriptions.retrieve(invoice.subscription);
             await syncSubscriptionFromStripe(sub);
           }
+        }
+        if (event.type === 'invoice.payment_failed') {
+          // Fire-and-forget: sendEmail() never throws on its own, but await
+          // here so a failed email is surfaced in the webhook response time
+          // rather than the next event loop tick.
+          await notifyPaymentFailed(event.data.object);
         }
         break;
 

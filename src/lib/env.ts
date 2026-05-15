@@ -40,6 +40,13 @@ const envSchema = z.object({
 
   // SSH connection timeout, per-server, for remote ops.
   SSH_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
+
+  // Transactional email (Resend). If RESEND_API_KEY is empty, sendEmail()
+  // falls back to logging the message instead of dispatching — convenient
+  // for dev, but a misconfiguration in production. EMAIL_FROM uses
+  // "Name <addr>" syntax.
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default('ShieldVPN <noreply@example.com>'),
 });
 
 const parsed = envSchema.safeParse(process.env);
