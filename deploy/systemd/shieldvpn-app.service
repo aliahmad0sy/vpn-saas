@@ -35,7 +35,12 @@ RestrictNamespaces=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
-MemoryDenyWriteExecute=yes
+# NOTE: MemoryDenyWriteExecute=yes is intentionally OMITTED.
+# V8's JIT compiler creates W+X mappings via mmap/mprotect to generate
+# baseline-compiled code; MDWE blocks those syscalls and the process
+# core-dumps with errno 12 (ENOMEM) in v8::base::OS::SetPermissions
+# the moment any function gets hot enough to JIT. Every other hardening
+# directive in this unit is V8-safe.
 SystemCallArchitectures=native
 CapabilityBoundingSet=
 AmbientCapabilities=
